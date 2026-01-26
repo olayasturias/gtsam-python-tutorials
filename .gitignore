@@ -213,3 +213,7 @@ __marimo__/
 .copilot/
 .copilotignore
 
+.agent.xml
+.ask.xml
+.edit.xml
+
