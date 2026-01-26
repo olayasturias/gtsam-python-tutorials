@@ -53,7 +53,12 @@ def parse_graph_file(filename: str):
     obs_Tc1= convert_to_gtsam_coords(obs_Tc1)
     obs_Tc2 = convert_to_gtsam_coords(obs_Tc2)
 
-    return from_idx,frame_idx, obs_Tc1, obs_Tc2, obs1_covTc, obs2_covTc
+    pixel1_uv = values["pixel1_uv"]
+    pixel2_uv = values["pixel2_uv"]
+    pixel1_uv_cov = values["pixel1_uv_cov"]
+    pixel2_uv_cov = values["pixel2_uv_cov"]
+
+    return from_idx,frame_idx, obs_Tc1, obs_Tc2, obs1_covTc, obs2_covTc, pixel1_uv, pixel2_uv, pixel1_uv_cov, pixel2_uv_cov
 
 def rerun_viz(from_idx, frame_idx,
               pose_1_ini, pose_2_ini,
@@ -74,6 +79,15 @@ def rerun_viz(from_idx, frame_idx,
         "logs",
         rr.TextLog(f"Pose 2 before optimization: {pose_2_ini}")
     )
+
+    landmark_w_1 = [pose_1_ini.transformFrom(np.array(landmark_1_i)) for landmark_1_i in landmark_1]
+    landmark_w_2 = [pose_2_ini.transformFrom(np.array(landmark_2_i)) for landmark_2_i in landmark_2]
+    for i, (w_1, w_2) in enumerate(zip(landmark_w_1, landmark_w_2)):
+        rr.log(f"world/arrows/{i}",
+               rr.LineStrips3D(
+                   [w_1, w_2],
+                   colors=[0, 0, 255],
+               ))
 
     pose_1_q = pose_1_opt.rotation().toQuaternion()
     pose_1_t = pose_1_opt.translation()
@@ -138,6 +152,16 @@ def rerun_viz(from_idx, frame_idx,
                quaternion=[pose_2_q.x(), pose_2_q.y(), pose_2_q.z(), pose_2_q.w()],
                axis_length=1.0
            ))
+
+
+    landmark_w_1 = [pose_1_opt.transformFrom(np.array(landmark_1_i)) for landmark_1_i in landmark_1]
+    landmark_w_2 = [pose_2_opt.transformFrom(np.array(landmark_2_i)) for landmark_2_i in landmark_2]
+    for i, (w_1, w_2) in enumerate(zip(landmark_w_1, landmark_w_2)):
+        rr.log(f"world/arrows/{i}",
+               rr.LineStrips3D(
+                   [w_1, w_2],
+                   colors=[0, 0, 255],
+               ))
 
     rr.log(
         "world/optimized/points",
