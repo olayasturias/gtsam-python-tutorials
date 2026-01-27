@@ -6,7 +6,7 @@ from utils.example_utils import parse_graph_file, residuals_for_pose, mahalanobi
 from gtsam import SmartProjectionPose3Factor, SmartProjectionParams, Cal3_S2
 
 def test_gtsam_smart_projection_pose():
-    rr.init("gtsam_test_custom_factor_rel", spawn=True)
+    rr.init("gtsam_smart_projection", spawn=True)
 
     # Read and parse graph values
     from_idx,frame_idx, \

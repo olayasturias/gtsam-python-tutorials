@@ -30,13 +30,14 @@ def make_pose_to_point_factor(camera_pose_key, landmark_key, obs_landmark_ck_i, 
 
 
 def test_gtsam_pose_to_point():
-    rr.init("gtsam_test_custom_factor_rel", spawn=True)
+    rr.init("gtsam_pose2point", spawn=True)
 
     # Read and parse graph values
     from_idx,frame_idx, \
         obs_landmark_c1, obs_landmark_c2, \
-        obs_cov_landmark_c1, obs_cov_landmark_c2 = \
-        parse_graph_file("graph_data_high_noise.json")
+        obs_cov_landmark_c1, obs_cov_landmark_c2,\
+        pixel1_uv, pixel2_uv, pixel1_cov_uv, pixel2_cov_uv = \
+        parse_graph_file("graph_data_dump_curved_plane.json")
 
     ################## GTSAM POSE GRAPH SETUP ####################
     # Create  a factor graph container
@@ -57,13 +58,11 @@ def test_gtsam_pose_to_point():
 
     # Prior: set pose 1 at origin (identity).
     # Fix pose 1 there with a constrained noise model (i.e. no noise in the estimate)
-    ini_estimate_noise = gtsam.noiseModel.Constrained.All(6)
-    graph.add(
-        gtsam.PriorFactorPose3(
-            pose_1_key,
-            P1,  # fixed at identity
-            ini_estimate_noise
-        ))
+    # Strong (not hard) prior on pose 1 to fix gauge
+    sigmas = np.array([1e-4]*6, dtype=np.float64)
+    graph.add(gtsam.PriorFactorPose3(
+        pose_1_key, P1, gtsam.noiseModel.Diagonal.Sigmas(sigmas)
+    ))
 
     ##### Step 2: Set factors for landmarks
 
@@ -91,18 +90,18 @@ def test_gtsam_pose_to_point():
         # Create noise model
         noise_model_1 = gtsam.noiseModel.Gaussian.Covariance(obs_cov_landmark_c1_i)
         noise_model_2 = gtsam.noiseModel.Gaussian.Covariance(obs_cov_landmark_c2_i)
-        # noise_model_1 = gtsam.noiseModel.Isotropic.Sigma(3, .1)
-        # noise_model_2 = gtsam.noiseModel.Isotropic.Sigma(3, .1)
+        noise_model_1 = gtsam.noiseModel.Isotropic.Sigma(3, .1)
+        noise_model_2 = gtsam.noiseModel.Isotropic.Sigma(3, .1)
 
-        # m_huber = gtsam.noiseModel.mEstimator.Huber.Create(.1)
-        # noise_model_1 = gtsam.noiseModel.Robust.Create(
-        #     m_huber,
-        #     noise_model_1
-        # )
-        # noise_model_2 = gtsam.noiseModel.Robust.Create(
-        #     m_huber,
-        #     noise_model_2
-        # )
+        m_huber = gtsam.noiseModel.mEstimator.Huber.Create(.1)
+        noise_model_1 = gtsam.noiseModel.Robust.Create(
+            m_huber,
+            noise_model_1
+        )
+        noise_model_2 = gtsam.noiseModel.Robust.Create(
+            m_huber,
+            noise_model_2
+        )
         # Create landmark key
         landmark_key = gtsam.symbol('l', i)
         landmark_keys.append(landmark_key)
@@ -133,7 +132,7 @@ def test_gtsam_pose_to_point():
     pose_1_opt = result.atPose3(pose_1_key)
     pose_2_opt = result.atPose3(pose_2_key)
 
-    landmark_positions = [result.atPoint3(landmark_keys[i]) for i in range(len(landmark_keys))]
+    landmark_positions = [result.atPoint3(k) for k in landmark_keys]
 
     rerun_viz(from_idx, frame_idx,
               pose_1_ini, pose_2_ini,
