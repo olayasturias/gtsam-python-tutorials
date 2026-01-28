@@ -81,7 +81,7 @@ def rerun_viz(from_idx, frame_idx,
     )
 
     landmark_w_1 = [pose_1_ini.transformFrom(np.array(landmark_1_i)) for landmark_1_i in landmark_1]
-    landmark_w_2 = [pose_2_ini.transformFrom(np.array(landmark_2_i)) for landmark_2_i in landmark_2]
+    landmark_w_2 = [pose_2_ini.transformTo(np.array(landmark_2_i)) for landmark_2_i in landmark_2]
     for i, (w_1, w_2) in enumerate(zip(landmark_w_1, landmark_w_2)):
         rr.log(f"world/arrows/{i}",
                rr.LineStrips3D(
