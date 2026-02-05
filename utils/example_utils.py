@@ -1,5 +1,7 @@
 import os
 import json
+import gtsam
+import pypose as pp
 import numpy as np
 import rerun as rr
 from pathlib import Path
@@ -33,15 +35,30 @@ def convert_to_gtsam_coords(points):
         gtsam_points.append(pt_gtsam)
     return gtsam_points
 
-def parse_graph_file(filename: str):
+def pypose_to_pose3(se3: pp.SE3) -> gtsam.Pose3:
+    T = se3.matrix().detach().cpu().double().numpy()
+    if T.ndim == 3: T = T[0]
+    R = gtsam.Rot3(T[:3, :3])
+    t = gtsam.Point3(float(T[0, 3]), float(T[1, 3]), float(T[2, 3]))
+    return gtsam.Pose3(R, t)
+
+def parse_graph_file(filename: str, frame_idx: int):
     script_dir = Path(__file__).resolve().parent
     data_path = script_dir.parent / "data" / filename
 
     with data_path.open("r") as f:
-        values = json.load(f)
+        all_values = json.load(f)
 
-    from_idx = values["from_idx"] # index 1 in corresponding variables
-    frame_idx = values["frame_idx"] # index 2 in corresponding variables
+    frame_key = str(frame_idx)
+    if frame_key not in all_values:
+        raise KeyError(f"Frame {frame_idx} not found in {filename}")
+
+    values = all_values[frame_key]
+
+    from_idx = values["from_idx"]
+
+    from_pose = pypose_to_pose3(pp.SE3(values["from_pose"]))
+    init_motion = pypose_to_pose3(pp.SE3(values["init_motion"]))
 
     # read values
     obs_Tc1 = values["obs_Tc_1"]
@@ -50,15 +67,28 @@ def parse_graph_file(filename: str):
     obs2_covTc = values["obs2_covTc"]
 
     # convert values to gtsam coords
-    obs_Tc1= convert_to_gtsam_coords(obs_Tc1)
-    obs_Tc2 = convert_to_gtsam_coords(obs_Tc2)
+    # obs_Tc1 = convert_to_gtsam_coords(obs_Tc1)
+    # obs_Tc2 = convert_to_gtsam_coords(obs_Tc2)
 
     pixel1_uv = values["pixel1_uv"]
     pixel2_uv = values["pixel2_uv"]
     pixel1_uv_cov = values["pixel1_uv_cov"]
     pixel2_uv_cov = values["pixel2_uv_cov"]
 
-    return from_idx,frame_idx, obs_Tc1, obs_Tc2, obs1_covTc, obs2_covTc, pixel1_uv, pixel2_uv, pixel1_uv_cov, pixel2_uv_cov
+    return (
+        from_idx,
+        frame_idx,
+        from_pose,
+        init_motion,
+        obs_Tc1,
+        obs_Tc2,
+        obs1_covTc,
+        obs2_covTc,
+        pixel1_uv,
+        pixel2_uv,
+        pixel1_uv_cov,
+        pixel2_uv_cov,
+    )
 
 def rerun_viz(from_idx, frame_idx,
               pose_1_ini, pose_2_ini,
@@ -68,7 +98,7 @@ def rerun_viz(from_idx, frame_idx,
               landmark_positions
               ):
 
-    rr.set_time("step", sequence=0)
+    rr.set_time("step", sequence=from_idx)
     pose_1_ini_rot = pose_1_ini.rotation().toQuaternion()
     rr.log(
         "logs",
@@ -96,7 +126,7 @@ def rerun_viz(from_idx, frame_idx,
     pose_2_t = pose_2_opt.translation()
 
     # Log optimized poses
-    rr.set_time("step", sequence=1)
+    rr.set_time("step", sequence=frame_idx)
     rr.log(
         "logs",
         rr.TextLog(f"Pose 1 after optimization: {pose_1_opt}")
@@ -108,16 +138,16 @@ def rerun_viz(from_idx, frame_idx,
     )
 
     # camera
-    rr.set_time("step", sequence=0)
+    rr.set_time("step", sequence=from_idx)
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, static=True)
-    rr.log("world/cam/{}".format(from_idx),
+    rr.log("world/cam/{}/{}".format(frame_idx, from_idx),
            rr.Transform3D(
                translation=pose_1_ini.translation(),
                quaternion=[pose_1_ini_rot.x(), pose_1_ini_rot.y(), pose_1_ini_rot.z(), pose_1_ini_rot.w()],
                axis_length=1.0,
            ))
 
-    rr.log("world/cam/{}".format(frame_idx),
+    rr.log("world/cam/{}/{}".format(frame_idx, frame_idx),
            rr.Transform3D(
                translation=pose_2_ini.translation(),
                quaternion=[pose_2_ini_rot.x(), pose_2_ini_rot.y(), pose_2_ini_rot.z(), pose_2_ini_rot.w()],
@@ -128,7 +158,7 @@ def rerun_viz(from_idx, frame_idx,
     landmark_covar_2 = [np.diag(np.array(landmark_covar_i))/2 for landmark_covar_i in landmark_covar_2]
 
     rr.log(
-        "world/cam/{}/points_w_covar".format(from_idx),
+        "world/cam/{}/{}/points_w_covar".format(frame_idx, from_idx),
         rr.Ellipsoids3D(
             centers=landmark_1,
             half_sizes=landmark_covar_1,
@@ -137,7 +167,7 @@ def rerun_viz(from_idx, frame_idx,
     )
 
     rr.log(
-        "world/cam/{}/points_w_covar".format(frame_idx),
+        "world/cam/{}/{}/points_w_covar".format(frame_idx, frame_idx),
         rr.Ellipsoids3D(
             centers=landmark_2,
             half_sizes=landmark_covar_2,
@@ -145,8 +175,8 @@ def rerun_viz(from_idx, frame_idx,
         )
     )
 
-    rr.set_time("step", sequence=1)
-    rr.log("world/cam/{}".format(frame_idx),
+    rr.set_time("step", sequence=frame_idx)
+    rr.log("world/cam/{}/{}".format(frame_idx, frame_idx),
            rr.Transform3D(
                translation=pose_2_t,
                quaternion=[pose_2_q.x(), pose_2_q.y(), pose_2_q.z(), pose_2_q.w()],

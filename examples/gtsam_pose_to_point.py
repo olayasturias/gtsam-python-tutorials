@@ -37,7 +37,7 @@ def test_gtsam_pose_to_point():
         obs_landmark_c1, obs_landmark_c2, \
         obs_cov_landmark_c1, obs_cov_landmark_c2,\
         pixel1_uv, pixel2_uv, pixel1_cov_uv, pixel2_cov_uv = \
-        parse_graph_file("graph_data_dump_curved_plane.json")
+        parse_graph_file("graph_data_dump_long.json", frame_idx=24)
 
     ################## GTSAM POSE GRAPH SETUP ####################
     # Create  a factor graph container

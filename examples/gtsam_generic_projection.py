@@ -23,7 +23,7 @@ def test_gtsam_generic_projection_with_3d_priors():
     pose_2_key = gtsam.symbol('p', 2)
 
     P1 = gtsam.Pose3.Identity()
-    P2 = gtsam.Pose3(gtsam.Rot3(np.eye(3)*0.9),
+    P2 = gtsam.Pose3(gtsam.Rot3(np.eye(3)*1),
                      gtsam.Point3(np.array([0.05, 0.05, 0.05], dtype=np.float64)))
 
     initial.insert(pose_1_key, P1)
